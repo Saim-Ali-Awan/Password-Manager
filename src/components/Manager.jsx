@@ -5,20 +5,23 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { BiCopy, BiEdit, BiTrash } from 'react-icons/bi';
 
-// CHANGE THIS TO YOUR PIN
-const PIN = '627462';
+// CHANGE YOUR PIN HERE
+const PIN = '627426';
 
 const Manager = () => {
-  // ---------- PIN ----------
+  // === PIN STATE (WITH 3 TRIES) ===
   const [pinInput, setPinInput] = useState('');
+  const [triesLeft, setTriesLeft] = useState(3);
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockTimeLeft, setLockTimeLeft] = useState(0);
   const [isUnlocked, setIsUnlocked] = useState(false);
 
-  // ---------- APP ----------
+  // === APP STATE ===
   const imgRef = useRef(null);
   const [form, setForm] = useState({ site: '', username: '', password: '' });
   const [passwords, setPasswords] = useState([]);
 
-  // Load from localStorage
+  // Load passwords from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('passwords');
     if (saved) {
@@ -30,38 +33,58 @@ const Manager = () => {
     }
   }, []);
 
-  // Save to localStorage
+  // Save passwords to localStorage
   useEffect(() => {
-    if (passwords.length) {
+    if (passwords.length > 0) {
       localStorage.setItem('passwords', JSON.stringify(passwords));
     }
   }, [passwords]);
 
-  // ---------- PIN ----------
+  // Countdown timer for lock
+  useEffect(() => {
+    if (lockTimeLeft > 0) {
+      const timer = setTimeout(() => setLockTimeLeft(lockTimeLeft - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (isLocked) {
+      setIsLocked(false);
+      setTriesLeft(3);
+    }
+  }, [lockTimeLeft, isLocked]);
+
+  // === PIN SUBMIT ===
   const handlePinSubmit = (e) => {
     e.preventDefault();
+    if (isLocked) return;
+
     if (pinInput === PIN) {
       setIsUnlocked(true);
-      toast.success('Unlocked!');
+      setTriesLeft(3);
+      toast.success('Welcome back!');
     } else {
-      toast.error('Wrong PIN!');
+      const newTries = triesLeft - 1;
+      setTriesLeft(newTries);
+      if (newTries === 0) {
+        setIsLocked(true);
+        setLockTimeLeft(30);
+        toast.error('Too many tries! Wait 30s');
+      } else {
+        toast.error(`Wrong PIN! ${newTries} ${newTries === 1 ? 'try' : 'tries'} left`);
+      }
       setPinInput('');
     }
   };
 
-  // ---------- FORM ----------
+  // === FORM FUNCTIONS ===
   const showPassword = () => {
     if (!imgRef.current) return;
-    if (imgRef.current.src.includes('eyecross.png')) {
-      imgRef.current.src = '/eye.png';
-    } else {
-      imgRef.current.src = '/eyecross.png';
-    }
+    imgRef.current.src.includes('eyecross.png')
+      ? (imgRef.current.src = '/eye.png')
+      : (imgRef.current.src = '/eyecross.png');
   };
 
   const savePassword = () => {
     if (!form.site || !form.username || !form.password) {
-      toast.error('All fields required');
+      toast.error('All fields are required');
       return;
     }
     const newEntry = {
@@ -72,14 +95,14 @@ const Manager = () => {
     };
     setPasswords((prev) => [...prev, newEntry]);
     setForm({ site: '', username: '', password: '' });
-    toast.success('Saved!');
+    toast.success('Password saved!');
   };
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // ---------- PIN SCREEN ----------
+  // === PIN SCREEN (SAME LAYOUT) ===
   if (!isUnlocked) {
     return (
       <div className="min-h-screen bg-[color:var(--background)] flex items-center justify-center p-4">
@@ -93,16 +116,24 @@ const Manager = () => {
               type="password"
               value={pinInput}
               onChange={(e) => setPinInput(e.target.value)}
-              placeholder="••••"
+              placeholder="Enter Pin"
               maxLength={Infinity}
-              className="w-full p-4 text-center text-2xl tracking-widest rounded-2xl border-2 border-[color:var(--border)] bg-[color:var(--input)] focus:border-[color:var(--ring)] focus:outline-none transition-all"
+              disabled={isLocked}
+              className={`w-full p-4 text-center text-lg tracking-widest rounded-2xl border-2 
+                ${isLocked ? 'opacity-50 cursor-not-allowed' : ''} 
+                border-[color:var(--border)] bg-[color:var(--input)] focus:border-[color:var(--ring)] focus:outline-none transition-all`}
               autoFocus
             />
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-[color:var(--primary)] to-[color:var(--accent)] text-[color:var(--primary-foreground)] py-3 rounded-2xl font-bold text-lg hover:scale-[1.02] transition-all"
+              disabled={isLocked}
+              className={`w-full py-3 rounded-2xl font-bold text-lg transition-all
+                ${isLocked 
+                  ? 'bg-gray-500 text-gray-300 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-[color:var(--primary)] to-[color:var(--accent)] text-[color:var(--primary-foreground)] hover:scale-[1.02]'
+                }`}
             >
-              Unlock
+              {isLocked ? `Wait ${lockTimeLeft}s` : 'Unlock'}
             </button>
           </form>
         </div>
@@ -110,7 +141,7 @@ const Manager = () => {
     );
   }
 
-  // ---------- MAIN APP ----------
+  // === MAIN APP (UNCHANGED) ===
   return (
     <div className="min-h-screen bg-[color:var(--background)] p-4 md:p-8">
       <ToastContainer position="top-right" theme="colored" autoClose={2000} />
@@ -229,7 +260,7 @@ const Manager = () => {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm">{'•'.repeat(8)}</span>
+                          <span className="font-mono text-sm">••••••••</span>
                           <button className="p-1 opacity-60" disabled>
                             <BiCopy className="w-4 h-4" />
                           </button>
