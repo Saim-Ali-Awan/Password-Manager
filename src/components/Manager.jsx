@@ -1,18 +1,22 @@
-// src/components/Manager.jsx
-import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+'use client';
+
+import React, { useRef, useState, useEffect } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { BiCopy, BiEdit, BiTrash, BiShow, BiHide } from 'react-icons/bi';
-import { v4 as uuidv4 } from 'uuid';
+import { BiCopy, BiEdit, BiTrash } from 'react-icons/bi';
+
+// CHANGE THIS TO YOUR PIN
+const PIN = '627462';
 
 const Manager = () => {
-  const eyeRef = useRef(null);
-  const passwordRef = useRef(null);
+  // ---------- PIN ----------
+  const [pinInput, setPinInput] = useState('');
+  const [isUnlocked, setIsUnlocked] = useState(false);
 
+  // ---------- APP ----------
+  const imgRef = useRef(null);
   const [form, setForm] = useState({ site: '', username: '', password: '' });
   const [passwords, setPasswords] = useState([]);
-  const [editId, setEditId] = useState(null);
-  const [showPassword, setShowPassword] = useState(false);
 
   // Load from localStorage
   useEffect(() => {
@@ -21,260 +25,174 @@ const Manager = () => {
       try {
         setPasswords(JSON.parse(saved));
       } catch (e) {
-        toast.error('Failed to load passwords');
+        console.error('Failed to load passwords');
       }
     }
   }, []);
 
   // Save to localStorage
   useEffect(() => {
-    localStorage.setItem('passwords', JSON.stringify(passwords));
+    if (passwords.length) {
+      localStorage.setItem('passwords', JSON.stringify(passwords));
+    }
   }, [passwords]);
 
-  // Toggle password visibility
-  const togglePasswordVisibility = useCallback(() => {
-    setShowPassword((prev) => !prev);
-    if (passwordRef.current) {
-      passwordRef.current.type = showPassword ? 'password' : 'text';
+  // ---------- PIN ----------
+  const handlePinSubmit = (e) => {
+    e.preventDefault();
+    if (pinInput === PIN) {
+      setIsUnlocked(true);
+      toast.success('Unlocked!');
+    } else {
+      toast.error('Wrong PIN!');
+      setPinInput('');
     }
-  }, [showPassword]);
-
-  // Reset eye icon
-  useEffect(() => {
-    if (eyeRef.current) {
-      eyeRef.current.src = showPassword ? '/eyecross.png' : '/eye.png';
-    }
-  }, [showPassword]);
-
-  const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const savePassword = useCallback(() => {
+  // ---------- FORM ----------
+  const showPassword = () => {
+    if (!imgRef.current) return;
+    if (imgRef.current.src.includes('eyecross.png')) {
+      imgRef.current.src = '/eye.png';
+    } else {
+      imgRef.current.src = '/eyecross.png';
+    }
+  };
+
+  const savePassword = () => {
     if (!form.site || !form.username || !form.password) {
-      toast.error('Please fill all fields');
+      toast.error('All fields required');
       return;
     }
-
-    if (editId) {
-      setPasswords((prev) =>
-        prev.map((item) =>
-          item.id === editId ? { ...item, ...form } : item
-        )
-      );
-      setEditId(null);
-      toast.success('Password updated!');
-    } else {
-      const newEntry = { id: uuidv4(), ...form };
-      setPasswords((prev) => [...prev, newEntry]);
-      toast.success('Password saved!');
-    }
-
+    const newEntry = {
+      id: Date.now(),
+      site: form.site.trim(),
+      username: form.username.trim(),
+      password: form.password,
+    };
+    setPasswords((prev) => [...prev, newEntry]);
     setForm({ site: '', username: '', password: '' });
-    setShowPassword(false);
-  }, [form, editId]);
+    toast.success('Saved!');
+  };
 
-  const copyText = useCallback((text) => {
-    navigator.clipboard.writeText(text).then(
-      () => toast.success('Copied!'),
-      () => toast.error('Copy failed')
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  // ---------- PIN SCREEN ----------
+  if (!isUnlocked) {
+    return (
+      <div className="min-h-screen bg-[color:var(--background)] flex items-center justify-center p-4">
+        <ToastContainer position="top-right" theme="colored" autoClose={3000} />
+        <div className="bg-[color:var(--card)]/90 backdrop-blur-xl rounded-3xl p-10 shadow-2xl border border-[color:var(--border)] w-full max-w-sm">
+          <h2 className="text-3xl font-bold text-center mb-6 text-[color:var(--foreground)]">
+            Enter PIN
+          </h2>
+          <form onSubmit={handlePinSubmit} className="space-y-4">
+            <input
+              type="password"
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value)}
+              placeholder="••••"
+              maxLength={Infinity}
+              className="w-full p-4 text-center text-2xl tracking-widest rounded-2xl border-2 border-[color:var(--border)] bg-[color:var(--input)] focus:border-[color:var(--ring)] focus:outline-none transition-all"
+              autoFocus
+            />
+            <button
+              type="submit"
+              className="w-full bg-gradient-to-r from-[color:var(--primary)] to-[color:var(--accent)] text-[color:var(--primary-foreground)] py-3 rounded-2xl font-bold text-lg hover:scale-[1.02] transition-all"
+            >
+              Unlock
+            </button>
+          </form>
+        </div>
+      </div>
     );
-  }, []);
+  }
 
-  const handleEdit = useCallback((id) => {
-    const item = passwords.find((p) => p.id === id);
-    if (item) {
-      setForm({ site: item.site, username: item.username, password: item.password });
-      setEditId(id);
-      setShowPassword(false);
-      toast.info('Edit mode');
-    }
-  }, [passwords]);
-
-  const handleDelete = useCallback((id) => {
-    if (window.confirm('Delete this password?')) {
-      setPasswords((prev) => prev.filter((p) => p.id !== id));
-      toast.info('Deleted');
-    }
-  }, []);
-
-  // Memoized table rows
-  const tableRows = useMemo(() => {
-    return passwords.map((item) => (
-      <tr
-        key={item.id}
-        className="hover:bg-[color:var(--muted)/0.05] transition-colors"
-      >
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-2">
-            <a
-              href={item.site}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[color:var(--primary)] hover:underline truncate max-w-[140px] md:max-w-[200px] inline-block"
-            >
-              {item.site}
-            </a>
-            <button
-              onClick={() => copyText(item.site)}
-              className="p-1 text-[color:var(--muted-foreground)] hover:text-[color:var(--primary)] transition-colors"
-              aria-label="Copy site"
-            >
-              <BiCopy className="w-4 h-4" />
-            </button>
-          </div>
-        </td>
-
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="truncate max-w-[100px] md:max-w-[160px] inline-block">
-              {item.username}
-            </span>
-            <button
-              onClick={() => copyText(item.username)}
-              className="p-1 text-[color:var(--muted-foreground)] hover:text-[color:var(--primary)] transition-colors"
-              aria-label="Copy username"
-            >
-              <BiCopy className="w-4 h-4" />
-            </button>
-          </div>
-        </td>
-
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-sm">
-              {'•'.repeat(item.password.length)}
-            </span>
-            <button
-              onClick={() => copyText(item.password)}
-              className="p-1 text-[color:var(--muted-foreground)] hover:text-[color:var(--primary)] transition-colors"
-              aria-label="Copy password"
-            >
-              <BiCopy className="w-4 h-4" />
-            </button>
-          </div>
-        </td>
-
-        <td className="px-4 py-3 text-center">
-          <div className="flex justify-center gap-2">
-            <button
-              onClick={() => handleEdit(item.id)}
-              className="p-1 text-[color:var(--accent)] hover:scale-110 transition-transform"
-              aria-label="Edit"
-            >
-              <BiEdit className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleDelete(item.id)}
-              className="p-1 text-[color:var(--destructive)] hover:scale-110 transition-transform"
-              aria-label="Delete"
-            >
-              <BiTrash className="w-4 h-4" />
-            </button>
-          </div>
-        </td>
-      </tr>
-    ));
-  }, [passwords, copyText, handleEdit, handleDelete]);
-
+  // ---------- MAIN APP ----------
   return (
-    <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)] p-4 md:p-8">
-      <ToastContainer
-        position="top-right"
-        autoClose={2000}
-        hideProgressBar
-        theme="colored"
-        toastClassName="text-sm"
-      />
+    <div className="min-h-screen bg-[color:var(--background)] p-4 md:p-8">
+      <ToastContainer position="top-right" theme="colored" autoClose={2000} />
 
-      <div className="max-w-4xl mx-auto space-y-8">
-        {/* Header – NO GRADIENT */}
-        <header className="text-center">
-          <h1 className="text-5xl md:text-6xl font-black text-[color:var(--primary)]">
-            Pass<span className="text-[color:var(--accent)]">World</span>
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-5xl md:text-6xl font-black bg-gradient-to-r from-[color:var(--primary)] to-[color:var(--accent)] bg-clip-text text-transparent mb-4">
+            Pass<span className="text-[color:var(--primary)]">OP</span>
           </h1>
-          <p className="mt-2 text-lg text-[color:var(--muted-foreground)]">
-            Your secure password manager
-          </p>
-        </header>
+          <p className="text-xl text-[color:var(--muted-foreground)]">Your secure password manager</p>
+        </div>
 
         {/* Form Card */}
-        <div className="bg-[color:var(--card)] backdrop-blur-xl rounded-3xl p-6 md:p-8 shadow-[var(--shadow-xl)] border border-[color:var(--border)]">
+        <div className="bg-[color:var(--card)]/80 backdrop-blur-xl rounded-3xl p-8 md:p-12 shadow-[var(--shadow-2xl)] border border-[color:var(--border)] mb-8">
           <div className="space-y-6">
-            {/* Site */}
             <input
-              type="url"
-              placeholder="Website URL"
               name="site"
               value={form.site}
               onChange={handleChange}
-              className="w-full px-4 py-3 text-lg rounded-2xl border-2 border-[color:var(--border)] bg-[color:var(--input)] text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:border-[color:var(--ring)] focus:outline-none transition-all duration-200 hover:shadow-lg shadow[var(--primary)] "
+              placeholder="Website URL"
+              className="w-full p-4 text-lg rounded-2xl border-2 border-[color:var(--border)] bg-[color:var(--input)] focus:border-[color:var(--ring)] focus:outline-none transition-all duration-300"
             />
 
-            {/* Username + Password */}
             <div className="grid md:grid-cols-2 gap-6">
               <input
-                type="text"
-                placeholder="Username"
                 name="username"
                 value={form.username}
                 onChange={handleChange}
-                className="px-4 py-3 text-lg rounded-2xl border-2 border-[color:var(--border)] bg-[color:var(--input)] text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:border-[color:var(--ring)] focus:outline-none transition-all duration-200 hover:shadow-md"
+                placeholder="Username"
+                className="p-4 text-lg rounded-2xl border-2 border-[color:var(--border)] bg-[color:var(--input)] focus:border-[color:var(--ring)] focus:outline-none transition-all duration-300"
               />
 
               <div className="relative">
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Password"
                   name="password"
+                  type="password"
                   value={form.password}
-                  ref={passwordRef}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 pr-12 text-lg rounded-2xl border-2 border-[color:var(--border)] bg-[color:var(--input)] text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:border-[color:var(--ring)] focus:outline-none transition-all duration-200 hover:shadow-md"
+                  placeholder="Password"
+                  className="w-full p-4 pr-12 text-lg rounded-2xl border-2 border-[color:var(--border)] bg-[color:var(--input)] focus:border-[color:var(--ring)] focus:outline-none transition-all duration-300"
                 />
                 <button
                   type="button"
-                  onClick={togglePasswordVisibility}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-[color:var(--muted)/0.3] transition-colors"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={showPassword}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-2 hover:scale-110 transition-transform"
                 >
-                  {showPassword ? (
-                    <BiHide className="w-5 h-5 text-[color:var(--muted-foreground)]" />
-                  ) : (
-                    <BiShow className="w-5 h-5 text-[color:var(--muted-foreground)]" />
-                  )}
+                  <img
+                    ref={imgRef}
+                    src="/eye.png"
+                    alt="Toggle"
+                    className="w-6 h-6"
+                  />
                 </button>
               </div>
             </div>
 
-            {/* Save Button – NO GRADIENT */}
             <button
               onClick={savePassword}
-              className={`w-full py-3.5 px-6 rounded-2xl font-bold text-lg shadow-lg transition-all duration-200 flex items-center justify-center gap-2 ${
-                editId
-                  ? 'bg-orange-500 text-white hover:bg-orange-600'
-                  : 'bg-[color:var(--primary)] text-[color:var(--primary-foreground)] hover:bg-[color:var(--ring)]'
-              }`}
+              className="w-full bg-gradient-to-r from-[color:var(--primary)] to-[color:var(--accent)] text-[color:var(--primary-foreground)] py-4 rounded-2xl font-bold text-lg shadow-[var(--shadow-xl)] hover:shadow-[var(--shadow-2xl)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
             >
-              {editId ? 'Update Password' : 'Save Password'}
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Save Password
             </button>
           </div>
         </div>
 
-        {/* Passwords Table */}
-        <section>
-          {/* Section Title – NO GRADIENT */}
-          <h2 className="text-3xl font-bold text-[color:var(--primary)] mb-4">
+        {/* Table */}
+        <div className="mt-8">
+          <h2 className="bg-gradient-to-r from-[color:var(--primary)] to-[color:var(--accent)] bg-clip-text text-transparent text-4xl font-bold mb-4">
             Your Passwords
           </h2>
 
           {passwords.length === 0 ? (
-            <p className="text-center text-[color:var(--muted-foreground)] py-8">
-              No passwords saved yet. Add one above!
-            </p>
+            <div className="text-center py-8 text-[color:var(--muted-foreground)] text-lg">
+              No passwords saved yet
+            </div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-[color:var(--border)] shadow-md">
-              <table className="w-full">
+            <div className="overflow-x-auto rounded-xl border border-[color:var(--border)]">
+              <table className="w-full min-w-[600px]">
                 <thead className="bg-[color:var(--muted)] text-[color:var(--muted-foreground)] text-sm uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-3 text-left">Site</th>
@@ -284,12 +202,56 @@ const Manager = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[color:var(--border)]">
-                  {tableRows}
+                  {passwords.map((item) => (
+                    <tr key={item.id} className="hover:bg-[color:var(--muted)/0.3] transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={item.site.startsWith('http') ? item.site : `https://${item.site}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[color:var(--primary)] hover:underline truncate max-w-[120px] inline-block"
+                          >
+                            {item.site}
+                          </a>
+                          <button className="p-1 opacity-60" disabled>
+                            <BiCopy className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate max-w-[100px] inline-block">{item.username}</span>
+                          <button className="p-1 opacity-60" disabled>
+                            <BiCopy className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm">{'•'.repeat(8)}</span>
+                          <button className="p-1 opacity-60" disabled>
+                            <BiCopy className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex justify-center gap-2">
+                          <button className="p-1 opacity-60" disabled aria-label="Edit">
+                            <BiEdit className="w-4 h-4" />
+                          </button>
+                          <button className="p-1 opacity-60" disabled aria-label="Delete">
+                            <BiTrash className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
-        </section>
+        </div>
       </div>
     </div>
   );
